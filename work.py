@@ -114,27 +114,27 @@ def checkTimePerHalfHour(start, end, target, value, criteria, calcInfo):
         delta = timedelta(seconds=1800)
         while d <= end_date:
             # key값을 조정한다 V|월|일|시|분|전/후
-            postfix = '01' if int(d.strftime("%M")) <= 30 else '02'
+            postfix = '01' if int(d.strftime("%M")) < 30 else '02'
             key = 'V'+d.strftime("%m%d%H")+postfix;
             target[key] = value;
             d += delta;
     else:
         diff = end_date - start_date;
-        # 60초 미만인 경우 체크하지 않는다.
-        if (diff.total_seconds() < 60):
+        # 60초 이하인 경우 체크하지 않는다.
+        if (diff.total_seconds() <= 60):
             return
         calcInfo['acc'] += diff.total_seconds();
         calcInfo['tempArr'].append(d);
         # 길이를 100% 모두 들은 이후 남은 시간 부터 다시 체크.
         if (calcInfo['acc'] > criteria):
             calcInfo['acc'] -= criteria;
-            target = checkTime(target, calcInfo['tempArr'][0]);
+            checkTime(target, calcInfo['tempArr'][0]);
             _t = calcInfo['tempArr'][-1];
             calcInfo['tempArr'].clear();
             calcInfo['tempArr'].append(_t);
         # 마지막으로 90% 이상 들은 경우라면 체크
         if (calcInfo['isLast'] and calcInfo['acc'] >= criteria * 0.9):
-            target = checkTime(target, calcInfo['tempArr'][0]);
+            checkTime(target, calcInfo['tempArr'][0]);
 
 def convertData(dict, ref):
     # 최종 dataframe의 데이터가 담길 r 선언
@@ -149,7 +149,7 @@ def convertData(dict, ref):
         temp = copy.deepcopy(templateDate);
 
         criteria = ref[ref.cid == item['cid']].duration.values[0] * 60
-        calcInfo = {
+        calc_info = {
             'tempArr': [],
             'acc': 0,
             'isLast': False
@@ -160,8 +160,8 @@ def convertData(dict, ref):
                 continue;
             ts = padding(str(int(time[0])));
             te = padding(str(int(time[1])));
-            calcInfo['isLast'] = idx == len(item['timeData'])-1;
-            checkTimePerHalfHour(ts, te, temp, 1, criteria, calcInfo);
+            calc_info['isLast'] = idx == len(item['timeData'])-1;
+            checkTimePerHalfHour(ts, te, temp, 1, criteria, calc_info);
 
         temp['id'] = item['id'];
         temp['cid'] = item['cid'];

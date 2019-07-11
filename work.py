@@ -91,67 +91,50 @@ def parseDF(df):
         parseRow(row, res);
     return res;
 
+def checkTime(target, date):
+    # check time
+    postfix = '01' if int(date.strftime("%M")) <= 30 else '02'
+    key = 'V' + date.strftime("%m%d%H") + postfix;
+    target[key] = 1;
+
+    return target;
+
 # 30분마다 해당 값을 1로 체크 하는 함수
-def checkTimePerHalfHour(start, end, target, value):
-    gs = datetime(int(startDateForTerm[0:4]), int(startDateForTerm[4:6]), int(startDateForTerm[6:8]), int(startDateForTerm[8:10]), int(startDateForTerm[10:12]))
-    s = datetime(int(start[0:4]), int(start[4:6]), int(start[6:8]), int(start[8:10]), int(start[10:12]))
+def checkTimePerHalfHour(start, end, target, value, criteria, calcInfo):
+
+    gs = datetime(int(startDateForTerm[0:4]), int(startDateForTerm[4:6]), int(startDateForTerm[6:8]), int(startDateForTerm[8:10]), int(startDateForTerm[10:12]), int(startDateForTerm[12:14]))
+    s = datetime(int(start[0:4]), int(start[4:6]), int(start[6:8]), int(start[8:10]), int(start[10:12]), int(start[12:14]))
     start_date = s if s >= gs else gs
-    ge = datetime(int(endDateForTerm[0:4]), int(endDateForTerm[4:6]), int(endDateForTerm[6:8]), int(endDateForTerm[8:10]), int(endDateForTerm[10:12]))
-    e = datetime(int(end[0:4]), int(end[4:6]), int(end[6:8]), int(end[8:10]), int(end[10:12]))
+    ge = datetime(int(endDateForTerm[0:4]), int(endDateForTerm[4:6]), int(endDateForTerm[6:8]), int(endDateForTerm[8:10]), int(endDateForTerm[10:12]), int(endDateForTerm[12:14]))
+    e = datetime(int(end[0:4]), int(end[4:6]), int(end[6:8]), int(end[8:10]), int(end[10:12]), int(end[12:14]))
     end_date = ge if ge <= e else e
     d = start_date
-    # 30분 마다 키에 value 를 체크한다
-    if (value == 0):
+    # 30분 마다 키에 생성하여 를 체크한다
+    if value == 0:
         delta = timedelta(seconds=1800)
         while d <= end_date:
             # key값을 조정한다 V|월|일|시|분|전/후
-            postfix = '01' if d.strftime("%M") == '00' else '02'
+            postfix = '01' if int(d.strftime("%M")) <= 30 else '02'
             key = 'V'+d.strftime("%m%d%H")+postfix;
             target[key] = value;
             d += delta;
     else:
-        postfix = '01' if d.strftime("%M") == '00' else '02'
-        key = 'V'+d.strftime("%m%d%H")+postfix;
-        target[key] = value;
-
-# 60초 미만인 경우 검출
-def isLessOneMinute(start, end):
-    start_date = datetime(int(start[0:4]), int(start[4:6]), int(start[6:8]), int(start[8:10]), int(start[10:12]), int(start[12:14]))
-    end_date = datetime(int(end[0:4]), int(end[4:6]), int(end[6:8]), int(end[8:10]), int(end[10:12]), int(end[12:14]))
-    diff = end_date - start_date
-    return diff.seconds <= 60
-
-def adjustTime(time):
-    d = int(time) % 10000
-    # 30분보다 큰 경우 분을 3000 으로 작은 경우 0000으로 초기화
-    if d >= 3000:
-        return time[:-4] + "3000";
-    else:
-        return time[:-4] + "0000";
-
-def checkCriteria(timeData, cid, ref):
-    cSeconds = ref[ref.cid == cid].duration.values[0] * 60
-    sumSeconds = 0
-    for time in timeData:
-        # 둘중 하나라도 빈 값인 경우 패스. 언제까지 체크해야할지 알수없음.
-        if math.isnan(time[0]) or math.isnan(time[1]):
-            continue
-        # 60초 미만인 경우 체크안함
-        start = padding(str(int(time[0])));
-        end = padding(str(int(time[1])));
-        gs = datetime(int(startDateForTerm[0:4]), int(startDateForTerm[4:6]), int(startDateForTerm[6:8]),
-                      int(startDateForTerm[8:10]), int(startDateForTerm[10:12]))
-        s = datetime(int(start[0:4]), int(start[4:6]), int(start[6:8]), int(start[8:10]), int(start[10:12]))
-        start_date = s if s >= gs else gs
-        ge = datetime(int(endDateForTerm[0:4]), int(endDateForTerm[4:6]), int(endDateForTerm[6:8]),
-                      int(endDateForTerm[8:10]), int(endDateForTerm[10:12]))
-        e = datetime(int(end[0:4]), int(end[4:6]), int(end[6:8]), int(end[8:10]), int(end[10:12]))
-        end_date = ge if ge <= e else e
-        diff = end_date-start_date;
-        sumSeconds =sumSeconds + diff.total_seconds()
-    # print('criteria : ', (cSeconds * 0.9), 'total time :', sumSeconds);
-    return (cSeconds * 0.9) <= sumSeconds
-
+        diff = end_date - start_date;
+        # 60초 미만인 경우 체크하지 않는다.
+        if (diff.total_seconds() < 60):
+            return
+        calcInfo['acc'] += diff.total_seconds();
+        calcInfo['tempArr'].append(d);
+        # 길이를 100% 모두 들은 이후 남은 시간 부터 다시 체크.
+        if (calcInfo['acc'] > criteria):
+            calcInfo['acc'] -= criteria;
+            target = checkTime(target, calcInfo['tempArr'][0]);
+            _t = calcInfo['tempArr'][-1];
+            calcInfo['tempArr'].clear();
+            calcInfo['tempArr'].append(_t);
+        # 마지막으로 90% 이상 들은 경우라면 체크
+        if (calcInfo['isLast'] and calcInfo['acc'] >= criteria * 0.9):
+            target = checkTime(target, calcInfo['tempArr'][0]);
 
 def convertData(dict, ref):
     # 최종 dataframe의 데이터가 담길 r 선언
@@ -159,27 +142,27 @@ def convertData(dict, ref):
 
     # template로 사용할 date객체 생성한다.
     templateDate = {}
-    checkTimePerHalfHour(startDateForTerm, endDateForTerm, templateDate, 0);
+    checkTimePerHalfHour(startDateForTerm, endDateForTerm, templateDate, 0, 0, {});
 
     # 사전에 파싱했던 결과를 실제 dataframe형태로 변환한다.
     for item in dict.values():
         temp = copy.deepcopy(templateDate);
-        # duration시간을 가지고와서 전체수강시간 * 0.9 보다 높은 경우인지 확인
-        if checkCriteria(item['timeData'], item['cid'], ref) == False:
-            continue;
-        # print(item['id']," is success : ", item['content']);
-        for time in item['timeData']:
+
+        criteria = ref[ref.cid == item['cid']].duration.values[0] * 60
+        calcInfo = {
+            'tempArr': [],
+            'acc': 0,
+            'isLast': False
+        }
+        for idx, time in enumerate(item['timeData']):
             # 둘중 하나라도 빈 값인 경우 패스. 언제까지 체크해야할지 알수없음.
             if math.isnan(time[0]) or math.isnan(time[1]):
                 continue;
-            # 60초 미만인 경우 체크안함
             ts = padding(str(int(time[0])));
             te = padding(str(int(time[1])));
-            if isLessOneMinute(ts, te):
-                continue;
-            s = adjustTime(ts);
-            e = adjustTime(te);
-            checkTimePerHalfHour(s, e, temp, 1);
+            calcInfo['isLast'] = idx == len(item['timeData'])-1;
+            checkTimePerHalfHour(ts, te, temp, 1, criteria, calcInfo);
+
         temp['id'] = item['id'];
         temp['cid'] = item['cid'];
         temp['ipData'] = item['ipData'];
